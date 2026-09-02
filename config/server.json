@@ -1,0 +1,10 @@
+{
+  "webServer": "apache",
+  "defaultPhp": "8.4",
+  "database": "mariadb",
+  "httpPort": 80,
+  "httpsPort": 443,
+  "dbPort": 3306,
+  "portableMode": true,
+  "autoStart": false
+}
