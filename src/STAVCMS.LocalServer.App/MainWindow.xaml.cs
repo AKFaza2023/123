@@ -18,7 +18,7 @@ public partial class MainWindow : Window
         _serverManager = new ServerManager(_paths);
         RootPathText.Text = _paths.Root;
         RefreshStatus();
-        AppendLog("STAVCMS Local Server 0.2 запущен.");
+        AppendLog("STAVCMS Local Server 0.3 запущен.");
     }
 
     private void RefreshStatus()
@@ -28,14 +28,18 @@ public partial class MainWindow : Window
 
         var apacheExe = System.IO.Path.Combine(_paths.Bin, "apache", "bin", "httpd.exe");
         var mariaExe = System.IO.Path.Combine(_paths.Bin, "mariadb", "bin", "mysqld.exe");
+        var phpExe = System.IO.Path.Combine(_paths.Bin, "php", "8.4", "php.exe");
 
         ApachePathText.Text = System.IO.File.Exists(apacheExe)
-            ? "Apache: найден"
-            : "Apache: не установлен в bin\\apache";
+            ? "Apache: встроен и готов"
+            : "Apache: компонент не найден";
 
         MariaDbPathText.Text = System.IO.File.Exists(mariaExe)
-            ? "MariaDB: найдена"
-            : "MariaDB: не установлена в bin\\mariadb";
+            ? "MariaDB: встроена и готова"
+            : "MariaDB: компонент не найден";
+
+        if (!System.IO.File.Exists(phpExe))
+            AppendLog("PHP 8.4 не найден в portable-пакете.");
 
         var busy = IPGlobalProperties.GetIPGlobalProperties()
             .GetActiveTcpListeners()
@@ -58,7 +62,7 @@ public partial class MainWindow : Window
                 _serverManager.StartApache();
             if (!_serverManager.MariaDbRunning)
                 _serverManager.StartMariaDb();
-            AppendLog("Команда запуска сервера выполнена.");
+            AppendLog("Команда запуска portable-сервера выполнена.");
         });
     }
 
