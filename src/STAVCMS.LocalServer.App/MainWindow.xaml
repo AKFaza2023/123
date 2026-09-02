@@ -23,8 +23,9 @@
                     <TextBlock Text="Настройки" Margin="0,8" Foreground="{StaticResource MutedBrush}" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Bottom">
-                    <TextBlock Text="STAVCMS Local Server 0.3" Foreground="{StaticResource MutedBrush}" FontSize="12" />
+                    <TextBlock Text="STAVCMS Local Server 0.4" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                     <TextBlock Text="Apache + PHP 8.4 + MariaDB" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" />
+                    <TextBlock Text="Автонастройка первого запуска" Foreground="{StaticResource AccentBrush}" FontSize="11" Margin="0,4,0,0" />
                     <TextBlock x:Name="RootPathText" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,6,0,0" />
                 </StackPanel>
             </DockPanel>
@@ -36,7 +37,7 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <StackPanel>
                         <TextBlock Text="Локальный сервер" FontSize="28" FontWeight="Bold" />
-                        <TextBlock Text="Portable-среда разработки STAVCMS" Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0" />
+                        <TextBlock Text="Portable-среда разработки STAVCMS с автоматической подготовкой" Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button x:Name="StartButton" Content="Запустить" Click="StartButton_Click" Background="{StaticResource AccentBrush}" Foreground="White" />
@@ -46,16 +47,16 @@
                 </Grid>
 
                 <UniformGrid Columns="3" Margin="0,0,0,20">
-                    <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="18" Margin="0,0,12,0"><StackPanel><TextBlock Text="Apache 2.4" Foreground="{StaticResource MutedBrush}" /><TextBlock x:Name="ApacheStatusText" Text="Остановлен" FontSize="22" FontWeight="Bold" Margin="0,8,0,0" /><TextBlock Text="HTTP 80 / HTTPS 443" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0" /></StackPanel></Border>
-                    <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="18" Margin="0,0,12,0"><StackPanel><TextBlock Text="MariaDB 11.4 LTS" Foreground="{StaticResource MutedBrush}" /><TextBlock x:Name="MariaDbStatusText" Text="Остановлена" FontSize="22" FontWeight="Bold" Margin="0,8,0,0" /><TextBlock Text="MySQL 3306" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0" /></StackPanel></Border>
-                    <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="18"><StackPanel><TextBlock Text="PHP" Foreground="{StaticResource MutedBrush}" /><TextBlock Text="8.4 x64 TS" FontSize="22" FontWeight="Bold" Margin="0,8,0,0" /><TextBlock Text="Встроен в portable-пакет" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0" /></StackPanel></Border>
+                    <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="18" Margin="0,0,12,0"><StackPanel><TextBlock Text="Apache 2.4" Foreground="{StaticResource MutedBrush}" /><TextBlock x:Name="ApacheStatusText" Text="Остановлен" FontSize="22" FontWeight="Bold" Margin="0,8,0,0" /><TextBlock Text="HTTP 80 → резерв 8080" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0" /></StackPanel></Border>
+                    <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="18" Margin="0,0,12,0"><StackPanel><TextBlock Text="MariaDB 11.4 LTS" Foreground="{StaticResource MutedBrush}" /><TextBlock x:Name="MariaDbStatusText" Text="Остановлена" FontSize="22" FontWeight="Bold" Margin="0,8,0,0" /><TextBlock Text="3306 → резерв 3307" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0" /></StackPanel></Border>
+                    <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="18"><StackPanel><TextBlock Text="PHP" Foreground="{StaticResource MutedBrush}" /><TextBlock Text="8.4 x64 TS" FontSize="22" FontWeight="Bold" Margin="0,8,0,0" /><TextBlock Text="Автопроверка через HTTP" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0" /></StackPanel></Border>
                 </UniformGrid>
 
                 <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="20" Margin="0,0,0,20">
                     <StackPanel><TextBlock Text="Проверка среды" FontSize="18" FontWeight="Bold" /><Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="ApachePathText" Text="Apache: проверка..." Margin="0,4" /><TextBlock x:Name="MariaDbPathText" Text="MariaDB: проверка..." Margin="0,4" /><TextBlock x:Name="PortStatusText" Text="Порты: проверка..." Margin="0,4" /></StackPanel><Button Grid.Column="1" Content="Обновить" Click="RefreshButton_Click" VerticalAlignment="Top" /></Grid></StackPanel>
                 </Border>
 
-                <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="20"><StackPanel><TextBlock Text="Журнал" FontSize="18" FontWeight="Bold" /><TextBox x:Name="LogBox" Margin="0,12,0,0" Height="180" IsReadOnly="True" Background="#111827" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel></Border>
+                <Border Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="20"><StackPanel><TextBlock Text="Журнал и диагностика" FontSize="18" FontWeight="Bold" /><TextBox x:Name="LogBox" Margin="0,12,0,0" Height="200" IsReadOnly="True" Background="#111827" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel></Border>
             </StackPanel>
         </ScrollViewer>
     </Grid>
