@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.NetworkInformation;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 using STAVCMS.LocalServer.Core;
 using STAVCMS.LocalServer.Projects;
 using STAVCMS.LocalServer.Server;
@@ -28,7 +29,7 @@ public partial class MainWindow : Window
         RootPathText.Text = _paths.Root;
         RefreshStatus();
         RefreshProjects();
-        AppendLog("STAVCMS Local Server 0.6 запущен.");
+        AppendLog("STAVCMS Local Server 0.7 запущен.");
     }
 
     private void RefreshProjects()
@@ -43,7 +44,7 @@ public partial class MainWindow : Window
     private void ProjectsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var p = SelectedProject;
-        SelectedProjectText.Text = p == null ? "Проект не выбран" : $"{p.Domain}  •  PHP {p.Php}  •  БД: {p.Database}\n{p.Path}";
+        SelectedProjectText.Text = p == null ? "Проект не выбран" : $"{p.Domain}  •  PHP {p.Php}  •  БД: {p.Database}\n{p.Path}  •  {p.Type}";
     }
 
     private async void CreateProject_Click(object sender, RoutedEventArgs e)
@@ -54,37 +55,45 @@ public partial class MainWindow : Window
             var type = (ProjectTypeBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "stavcms";
             var p = _projects.Create(ProjectNameBox.Text, ProjectDomainBox.Text, php, HttpsBox.IsChecked == true, type);
             AppendLog($"Проект создан: {p.Name} ({p.Domain}).");
-
-            AppendLog("Запрос Windows UAC для регистрации локального домена" + (p.Https ? " и SSL..." : "..."));
-            await _windows.RegisterProjectAsync(p.Domain, p.Https);
-            AppendLog(p.Https ? "Домен зарегистрирован, SSL выпущен и добавлен в доверенные." : "Домен зарегистрирован в hosts.");
-
-            await _serverManager.PrepareAsync();
-            _projects.GenerateApacheVHosts(_serverManager.HttpPort, _serverManager.HttpsPort);
-            if (!_serverManager.MariaDbRunning)
-            {
-                _serverManager.StartMariaDb();
-                await Task.Delay(1200);
-            }
-            await _serverManager.CreateDatabaseAsync(p.Database);
-            AppendLog($"База MariaDB создана: {p.Database}.");
-
-            if (_serverManager.ApacheRunning)
-            {
-                await _serverManager.StopAllAsync();
-                _serverManager.StartMariaDb();
-            }
-            _serverManager.StartApache();
-            AppendLog("VirtualHost активирован. Проект готов к работе.");
+            await ConfigureProjectAsync(p);
             RefreshProjects();
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            AppendLog("Регистрация Windows отменена пользователем. Проект сохранён, но локальный домен пока не активен.");
+            AppendLog("Регистрация Windows отменена. Проект сохранён, но локальный домен пока не активен.");
             RefreshProjects();
         }
         catch (Exception ex) { AppendLog($"Ошибка создания/настройки проекта: {ex.Message}"); RefreshProjects(); }
         finally { RefreshStatus(); }
+    }
+
+    private async void ImportProject_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog { Title = "Выберите папку существующего PHP/STAVCMS проекта" };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            var php = (PhpBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "8.4";
+            var p = _projects.Import(dialog.FolderName, ProjectNameBox.Text, ProjectDomainBox.Text, php);
+            AppendLog($"Проект импортирован из {dialog.FolderName}.");
+            await ConfigureProjectAsync(p);
+            RefreshProjects();
+        }
+        catch (Exception ex) { AppendLog($"Ошибка импорта: {ex.Message}"); }
+        finally { RefreshStatus(); }
+    }
+
+    private async Task ConfigureProjectAsync(ProjectDefinition p)
+    {
+        AppendLog("Запрос Windows UAC для регистрации локального домена" + (p.Https ? " и SSL..." : "..."));
+        await _windows.RegisterProjectAsync(p.Domain, p.Https);
+        await _serverManager.PrepareAsync();
+        _projects.GenerateApacheVHosts(_serverManager.HttpPort, _serverManager.HttpsPort);
+        if (!_serverManager.MariaDbRunning) { _serverManager.StartMariaDb(); await Task.Delay(1200); }
+        await _serverManager.CreateDatabaseAsync(p.Database);
+        if (_serverManager.ApacheRunning) { await _serverManager.StopAllAsync(); _serverManager.StartMariaDb(); await Task.Delay(500); }
+        _serverManager.StartApache();
+        AppendLog($"Проект готов. База: {p.Database}. Домен: {p.Domain}.");
     }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
@@ -94,13 +103,59 @@ public partial class MainWindow : Window
         if (Directory.Exists(path)) Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
     }
 
-    private void OpenSite_Click(object sender, RoutedEventArgs e)
+    private void OpenSite_Click(object sender, RoutedEventArgs e) => OpenProjectUrl(SelectedProject, "");
+    private void OpenAdmin_Click(object sender, RoutedEventArgs e) => OpenProjectUrl(SelectedProject, "admin/");
+
+    private void OpenDatabase_Click(object sender, RoutedEventArgs e)
     {
         var p = SelectedProject; if (p == null) return;
+        var suffix = _serverManager.HttpPort == 80 ? "" : $":{_serverManager.HttpPort}";
+        Process.Start(new ProcessStartInfo($"http://127.0.0.1{suffix}/phpmyadmin/index.php?route=/database/structure&db={Uri.EscapeDataString(p.Database)}") { UseShellExecute = true });
+    }
+
+    private void OpenLogs_Click(object sender, RoutedEventArgs e)
+    {
+        Directory.CreateDirectory(_paths.Logs);
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_paths.Logs}\"") { UseShellExecute = true });
+    }
+
+    private void OpenSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var config = Path.Combine(_paths.Config, "projects.json");
+        if (File.Exists(config)) Process.Start(new ProcessStartInfo("notepad.exe", $"\"{config}\"") { UseShellExecute = true });
+    }
+
+    private void ArchiveProject_Click(object sender, RoutedEventArgs e)
+    {
+        var p = SelectedProject; if (p == null) return;
+        try { var archive = _projects.Archive(p); AppendLog($"Архив создан: {archive}"); }
+        catch (Exception ex) { AppendLog($"Ошибка архивации: {ex.Message}"); }
+    }
+
+    private async void RemoveProject_Click(object sender, RoutedEventArgs e)
+    {
+        var p = SelectedProject; if (p == null) return;
+        if (MessageBox.Show($"Удалить проект «{p.Name}», его файлы и базу данных?", "STAVCMS", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        try
+        {
+            await _serverManager.PrepareAsync();
+            if (!_serverManager.MariaDbRunning) { _serverManager.StartMariaDb(); await Task.Delay(1000); }
+            await _serverManager.DropDatabaseAsync(p.Database);
+            _projects.Remove(p, true);
+            _projects.GenerateApacheVHosts(_serverManager.HttpPort, _serverManager.HttpsPort);
+            AppendLog($"Проект удалён: {p.Name}.");
+            RefreshProjects();
+        }
+        catch (Exception ex) { AppendLog($"Ошибка удаления проекта: {ex.Message}"); }
+    }
+
+    private void OpenProjectUrl(ProjectDefinition? p, string path)
+    {
+        if (p == null) return;
         var scheme = p.Https ? "https" : "http";
         var port = p.Https ? _serverManager.HttpsPort : _serverManager.HttpPort;
         var suffix = (scheme == "https" && port == 443) || (scheme == "http" && port == 80) ? "" : $":{port}";
-        Process.Start(new ProcessStartInfo($"{scheme}://{p.Domain}{suffix}") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo($"{scheme}://{p.Domain}{suffix}/{path}") { UseShellExecute = true });
     }
 
     private void RefreshStatus()
@@ -118,41 +173,13 @@ public partial class MainWindow : Window
     private async void StartButton_Click(object sender, RoutedEventArgs e)
     {
         StartButton.IsEnabled = false;
-        try
-        {
-            await _serverManager.PrepareAsync();
-            _projects.GenerateApacheVHosts(_serverManager.HttpPort, _serverManager.HttpsPort);
-            if (!_serverManager.MariaDbRunning) _serverManager.StartMariaDb();
-            if (!_serverManager.ApacheRunning) _serverManager.StartApache();
-            await Task.Delay(1500);
-            AppendLog(await _serverManager.CheckHttpAsync() ? "Apache + PHP отвечают." : "HTTP-проверка не прошла — смотрите журнал Apache.");
-        }
+        try { await _serverManager.PrepareAsync(); _projects.GenerateApacheVHosts(_serverManager.HttpPort, _serverManager.HttpsPort); if (!_serverManager.MariaDbRunning) _serverManager.StartMariaDb(); if (!_serverManager.ApacheRunning) _serverManager.StartApache(); await Task.Delay(1500); AppendLog(await _serverManager.CheckHttpAsync() ? "Apache + PHP отвечают." : "HTTP-проверка не прошла — смотрите журнал Apache."); }
         catch (Exception ex) { AppendLog($"Ошибка запуска: {ex.Message}"); }
         finally { StartButton.IsEnabled = true; RefreshStatus(); }
     }
 
-    private async void StopButton_Click(object sender, RoutedEventArgs e)
-    {
-        try { await _serverManager.StopAllAsync(); AppendLog("Apache и MariaDB остановлены."); }
-        catch (Exception ex) { AppendLog($"Ошибка остановки: {ex.Message}"); }
-        finally { RefreshStatus(); }
-    }
-
-    private async void RestartButton_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await _serverManager.StopAllAsync();
-            await _serverManager.PrepareAsync();
-            _projects.GenerateApacheVHosts(_serverManager.HttpPort, _serverManager.HttpsPort);
-            _serverManager.StartMariaDb();
-            _serverManager.StartApache();
-            AppendLog("Сервер перезапущен.");
-        }
-        catch (Exception ex) { AppendLog($"Ошибка перезапуска: {ex.Message}"); }
-        finally { RefreshStatus(); }
-    }
-
+    private async void StopButton_Click(object sender, RoutedEventArgs e) { try { await _serverManager.StopAllAsync(); AppendLog("Apache и MariaDB остановлены."); } catch (Exception ex) { AppendLog($"Ошибка остановки: {ex.Message}"); } finally { RefreshStatus(); } }
+    private async void RestartButton_Click(object sender, RoutedEventArgs e) { try { await _serverManager.StopAllAsync(); await _serverManager.PrepareAsync(); _projects.GenerateApacheVHosts(_serverManager.HttpPort, _serverManager.HttpsPort); _serverManager.StartMariaDb(); _serverManager.StartApache(); AppendLog("Сервер перезапущен."); } catch (Exception ex) { AppendLog($"Ошибка перезапуска: {ex.Message}"); } finally { RefreshStatus(); } }
     private void RefreshButton_Click(object sender, RoutedEventArgs e) { RefreshStatus(); RefreshProjects(); AppendLog("Данные обновлены."); }
     private void AppendLog(string message) { LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}"); LogBox.ScrollToEnd(); }
     protected override async void OnClosed(EventArgs e) { await _serverManager.DisposeAsync(); base.OnClosed(e); }
