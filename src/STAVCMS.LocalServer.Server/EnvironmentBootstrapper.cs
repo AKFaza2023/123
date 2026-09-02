@@ -48,10 +48,20 @@ public sealed class EnvironmentBootstrapper
         var confDir = Path.Combine(apache, "conf");
         Directory.CreateDirectory(confDir);
         var php = Path.Combine(_paths.Bin, "php", "8.4");
+        var phpMyAdmin = Path.Combine(_paths.Root, "tools", "phpmyadmin");
         static string P(string path) => path.Replace('\\', '/');
         var vhosts = Path.Combine(_paths.Runtime, "generated", "stavcms-vhosts.conf");
         Directory.CreateDirectory(Path.GetDirectoryName(vhosts)!);
         if (!File.Exists(vhosts)) File.WriteAllText(vhosts, "# STAVCMS generated virtual hosts\n");
+
+        var pmaBlock = Directory.Exists(phpMyAdmin) ? $"""
+Alias /phpmyadmin "{P(phpMyAdmin)}"
+<Directory "{P(phpMyAdmin)}">
+    Options FollowSymLinks
+    AllowOverride None
+    Require local
+</Directory>
+""" : "# phpMyAdmin is not bundled";
 
         var conf = $"""
 ServerRoot "{P(apache)}"
@@ -87,6 +97,7 @@ DocumentRoot "{P(documentRoot)}"
     AllowOverride All
     Require all granted
 </Directory>
+{pmaBlock}
 ErrorLog "{P(Path.Combine(_paths.Logs, "apache-error.log"))}"
 CustomLog "{P(Path.Combine(_paths.Logs, "apache-access.log"))}" common
 SSLSessionCache "shmcb:{P(Path.Combine(_paths.Runtime, "ssl_scache"))}(512000)"
