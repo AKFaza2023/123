@@ -18,7 +18,8 @@ public partial class MainWindow : Window
         _serverManager = new ServerManager(_paths);
         RootPathText.Text = _paths.Root;
         RefreshStatus();
-        AppendLog("STAVCMS Local Server 0.3 запущен.");
+        AppendLog("STAVCMS Local Server 0.4 запущен.");
+        AppendLog("Среда будет автоматически подготовлена при первом запуске сервера.");
     }
 
     private void RefreshStatus()
@@ -44,26 +45,49 @@ public partial class MainWindow : Window
         var busy = IPGlobalProperties.GetIPGlobalProperties()
             .GetActiveTcpListeners()
             .Select(x => x.Port)
-            .Where(p => p is 80 or 443 or 3306)
+            .Where(p => p is 80 or 443 or 3306 or 8080 or 8443 or 3307)
             .Distinct()
             .OrderBy(p => p)
             .ToArray();
 
         PortStatusText.Text = busy.Length == 0
-            ? "Порты 80 / 443 / 3306 свободны"
-            : $"Заняты порты: {string.Join(", ", busy)}";
+            ? "Основные и резервные порты свободны"
+            : $"Сейчас заняты порты: {string.Join(", ", busy)}";
     }
 
-    private void StartButton_Click(object sender, RoutedEventArgs e)
+    private async void StartButton_Click(object sender, RoutedEventArgs e)
     {
-        TryRun(() =>
+        StartButton.IsEnabled = false;
+        try
         {
-            if (!_serverManager.ApacheRunning)
-                _serverManager.StartApache();
+            AppendLog("Подготовка portable-среды...");
+            var prepared = await _serverManager.PrepareAsync();
+            AppendLog($"Выбраны порты: HTTP {_serverManager.HttpPort}, HTTPS {_serverManager.HttpsPort}, MariaDB {_serverManager.DbPort}.");
+            if (prepared.MariaDbInitialized)
+                AppendLog("MariaDB инициализирована для первого запуска.");
+            AppendLog($"Тестовый проект готов: {prepared.DemoProjectPath}");
+
             if (!_serverManager.MariaDbRunning)
                 _serverManager.StartMariaDb();
-            AppendLog("Команда запуска portable-сервера выполнена.");
-        });
+            if (!_serverManager.ApacheRunning)
+                _serverManager.StartApache();
+
+            await Task.Delay(1800);
+            var httpOk = await _serverManager.CheckHttpAsync();
+            if (httpOk)
+                AppendLog($"Проверка Apache + PHP успешна: http://127.0.0.1:{_serverManager.HttpPort}/");
+            else
+                AppendLog("Диагностика: Apache запущен, но HTTP-проверка не прошла. Проверьте журнал Apache.");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Ошибка запуска: {ex.Message}");
+        }
+        finally
+        {
+            StartButton.IsEnabled = true;
+            RefreshStatus();
+        }
     }
 
     private async void StopButton_Click(object sender, RoutedEventArgs e)
@@ -85,12 +109,17 @@ public partial class MainWindow : Window
 
     private async void RestartButton_Click(object sender, RoutedEventArgs e)
     {
+        RestartButton.IsEnabled = false;
         try
         {
             await _serverManager.StopAllAsync();
-            _serverManager.StartApache();
+            await _serverManager.PrepareAsync();
             _serverManager.StartMariaDb();
-            AppendLog("Сервер перезапущен.");
+            _serverManager.StartApache();
+            await Task.Delay(1500);
+            AppendLog(await _serverManager.CheckHttpAsync()
+                ? $"Сервер перезапущен и отвечает на http://127.0.0.1:{_serverManager.HttpPort}/"
+                : "Сервер перезапущен, но HTTP-проверка не прошла.");
         }
         catch (Exception ex)
         {
@@ -98,6 +127,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            RestartButton.IsEnabled = true;
             RefreshStatus();
         }
     }
@@ -106,22 +136,6 @@ public partial class MainWindow : Window
     {
         RefreshStatus();
         AppendLog("Состояние среды обновлено.");
-    }
-
-    private void TryRun(Action action)
-    {
-        try
-        {
-            action();
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"Ошибка запуска: {ex.Message}");
-        }
-        finally
-        {
-            RefreshStatus();
-        }
     }
 
     private void AppendLog(string message)
