@@ -28,13 +28,16 @@ jobs:
         run: |
           Copy-Item helper-publish/STAVCMS.ElevatedHelper.exe publish/STAVCMS.ElevatedHelper.exe -Force
           Copy-Item -Path config -Destination publish/config -Recurse -Force
-          New-Item -ItemType Directory -Force -Path publish/bin, publish/logs, publish/runtime, publish/projects, publish/databases, publish/backups, publish/ssl | Out-Null
+          New-Item -ItemType Directory -Force -Path publish/bin, publish/logs, publish/runtime, publish/projects, publish/databases, publish/backups, publish/ssl, publish/tools | Out-Null
       - name: Bundle Apache PHP and MariaDB
         shell: pwsh
         run: ./scripts/prepare-components.ps1
+      - name: Bundle phpMyAdmin 5.2.3
+        shell: pwsh
+        run: ./scripts/prepare-phpmyadmin.ps1
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: STAVCMS-LocalServer-0.6-win-x64-full
+          name: STAVCMS-LocalServer-0.7-win-x64-full
           path: publish/**
           if-no-files-found: error
