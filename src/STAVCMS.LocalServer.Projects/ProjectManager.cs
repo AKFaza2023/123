@@ -40,6 +40,36 @@ public sealed class ProjectManager
         return project;
     }
 
+    public ProjectDefinition Import(string sourceFolder, string name, string domain, string php = "8.4")
+    {
+        if (!Directory.Exists(sourceFolder)) throw new DirectoryNotFoundException("Папка импортируемого проекта не найдена.");
+        var project = Create(name, domain, php, false, "imported");
+        var destination = Path.Combine(_paths.Root, project.Path.Replace('/', Path.DirectorySeparatorChar), "public");
+        CopyDirectory(sourceFolder, destination);
+        return project;
+    }
+
+    public string Archive(ProjectDefinition project)
+    {
+        var source = Path.Combine(_paths.Root, project.Path.Replace('/', Path.DirectorySeparatorChar));
+        if (!Directory.Exists(source)) throw new DirectoryNotFoundException("Папка проекта не найдена.");
+        Directory.CreateDirectory(_paths.Backups);
+        var zip = Path.Combine(_paths.Backups, $"{project.Id}-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
+        System.IO.Compression.ZipFile.CreateFromDirectory(source, zip, System.IO.Compression.CompressionLevel.Optimal, false);
+        return zip;
+    }
+
+    public void Remove(ProjectDefinition project, bool deleteFiles)
+    {
+        var projects = Load().Where(p => !p.Id.Equals(project.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+        Save(projects);
+        if (deleteFiles)
+        {
+            var folder = Path.Combine(_paths.Root, project.Path.Replace('/', Path.DirectorySeparatorChar));
+            if (Directory.Exists(folder)) Directory.Delete(folder, true);
+        }
+    }
+
     public void GenerateApacheVHosts(int httpPort, int httpsPort)
     {
         var projects = Load().Where(x => x.Enabled).ToList();
@@ -81,6 +111,13 @@ public sealed class ProjectManager
                 }
             }
         }
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.GetFiles(source)) File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), true);
+        foreach (var dir in Directory.GetDirectories(source)) CopyDirectory(dir, Path.Combine(destination, Path.GetFileName(dir)));
     }
 
     private void Save(List<ProjectDefinition> projects) => File.WriteAllText(_registry, JsonSerializer.Serialize(projects, JsonOptions()));
