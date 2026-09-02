@@ -33,9 +33,13 @@ jobs:
           Copy-Item -Path config -Destination publish/config -Recurse -Force
           New-Item -ItemType Directory -Force -Path publish/bin, publish/logs, publish/runtime, publish/projects, publish/databases, publish/backups, publish/ssl | Out-Null
 
+      - name: Bundle Apache PHP and MariaDB
+        shell: pwsh
+        run: ./scripts/prepare-components.ps1
+
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: STAVCMS-LocalServer-0.2-win-x64
+          name: STAVCMS-LocalServer-0.3-win-x64-full
           path: publish/**
           if-no-files-found: error
