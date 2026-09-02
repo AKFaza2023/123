@@ -11,5 +11,6 @@
   <ItemGroup>
     <ProjectReference Include="..\STAVCMS.LocalServer.Core\STAVCMS.LocalServer.Core.csproj" />
     <ProjectReference Include="..\STAVCMS.LocalServer.Server\STAVCMS.LocalServer.Server.csproj" />
+    <ProjectReference Include="..\STAVCMS.LocalServer.Projects\STAVCMS.LocalServer.Projects.csproj" />
   </ItemGroup>
 </Project>
