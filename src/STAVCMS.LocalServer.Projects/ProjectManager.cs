@@ -11,7 +11,7 @@ public sealed class ProjectManager
     public ProjectManager(PortablePaths paths)
     {
         _paths = paths;
-        _registry = System.IO.Path.Combine(paths.Config, "projects.json");
+        _registry = Path.Combine(paths.Config, "projects.json");
     }
 
     public IReadOnlyList<ProjectDefinition> Load()
@@ -25,42 +25,32 @@ public sealed class ProjectManager
         var id = Slug(name);
         if (string.IsNullOrWhiteSpace(id)) throw new InvalidOperationException("Не удалось сформировать идентификатор проекта.");
         domain = NormalizeDomain(domain, id);
-
         var projects = Load().ToList();
-        if (projects.Any(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Проект с таким именем уже существует.");
-        if (projects.Any(p => p.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Этот локальный домен уже используется.");
+        if (projects.Any(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("Проект с таким именем уже существует.");
+        if (projects.Any(p => p.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("Этот локальный домен уже используется.");
 
         var relative = $"projects/{id}";
-        var folder = System.IO.Path.Combine(_paths.Root, "projects", id);
-        Directory.CreateDirectory(folder);
-        Directory.CreateDirectory(System.IO.Path.Combine(folder, "public"));
-        File.WriteAllText(System.IO.Path.Combine(folder, "public", "index.php"),
-            $"<?php echo '<h1>{Escape(name)}</h1><p>STAVCMS Local Server project is ready.</p><p>PHP '.PHP_VERSION.'</p>'; ?>");
+        var folder = Path.Combine(_paths.Root, "projects", id);
+        Directory.CreateDirectory(Path.Combine(folder, "public"));
+        File.WriteAllText(Path.Combine(folder, "public", "index.php"), $"<?php echo '<h1>{Escape(name)}</h1><p>STAVCMS Local Server project is ready.</p><p>PHP '.PHP_VERSION.'</p>'; ?>");
 
-        var project = new ProjectDefinition
-        {
-            Id = id, Name = name.Trim(), Path = relative, Domain = domain, Php = php,
-            Database = id.Replace('-', '_'), Https = https, Enabled = true, Type = type
-        };
+        var project = new ProjectDefinition { Id = id, Name = name.Trim(), Path = relative, Domain = domain, Php = php, Database = id.Replace('-', '_'), Https = https, Enabled = true, Type = type };
         projects.Add(project);
         Save(projects);
-        GenerateApacheVHosts(projects);
         return project;
     }
 
-    public void GenerateApacheVHosts(IEnumerable<ProjectDefinition>? source = null)
+    public void GenerateApacheVHosts(int httpPort, int httpsPort)
     {
-        var projects = source?.Where(x => x.Enabled).ToList() ?? Load().Where(x => x.Enabled).ToList();
-        var generated = System.IO.Path.Combine(_paths.Runtime, "generated");
+        var projects = Load().Where(x => x.Enabled).ToList();
+        var generated = Path.Combine(_paths.Runtime, "generated");
         Directory.CreateDirectory(generated);
-        var file = System.IO.Path.Combine(generated, "stavcms-vhosts.conf");
+        var file = Path.Combine(generated, "stavcms-vhosts.conf");
         using var writer = new StreamWriter(file, false);
         foreach (var p in projects)
         {
-            var root = System.IO.Path.Combine(_paths.Root, p.Path.Replace('/', System.IO.Path.DirectorySeparatorChar), "public").Replace('\\', '/');
-            writer.WriteLine("<VirtualHost *:80>");
+            var root = Path.Combine(_paths.Root, p.Path.Replace('/', Path.DirectorySeparatorChar), "public").Replace('\\', '/');
+            writer.WriteLine($"<VirtualHost *:{httpPort}>");
             writer.WriteLine($"  ServerName {p.Domain}");
             writer.WriteLine($"  DocumentRoot \"{root}\"");
             writer.WriteLine($"  <Directory \"{root}\">");
@@ -69,12 +59,31 @@ public sealed class ProjectManager
             writer.WriteLine("  </Directory>");
             writer.WriteLine("</VirtualHost>");
             writer.WriteLine();
+
+            if (p.Https)
+            {
+                var cert = Path.Combine(_paths.Ssl, p.Domain + ".crt.pem").Replace('\\', '/');
+                var key = Path.Combine(_paths.Ssl, p.Domain + ".key.pem").Replace('\\', '/');
+                if (File.Exists(cert) && File.Exists(key))
+                {
+                    writer.WriteLine($"<VirtualHost *:{httpsPort}>");
+                    writer.WriteLine($"  ServerName {p.Domain}");
+                    writer.WriteLine($"  DocumentRoot \"{root}\"");
+                    writer.WriteLine("  SSLEngine on");
+                    writer.WriteLine($"  SSLCertificateFile \"{cert}\"");
+                    writer.WriteLine($"  SSLCertificateKeyFile \"{key}\"");
+                    writer.WriteLine($"  <Directory \"{root}\">");
+                    writer.WriteLine("    AllowOverride All");
+                    writer.WriteLine("    Require all granted");
+                    writer.WriteLine("  </Directory>");
+                    writer.WriteLine("</VirtualHost>");
+                    writer.WriteLine();
+                }
+            }
         }
     }
 
-    private void Save(List<ProjectDefinition> projects) =>
-        File.WriteAllText(_registry, JsonSerializer.Serialize(projects, JsonOptions()));
-
+    private void Save(List<ProjectDefinition> projects) => File.WriteAllText(_registry, JsonSerializer.Serialize(projects, JsonOptions()));
     private static JsonSerializerOptions JsonOptions() => new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private static string NormalizeDomain(string value, string id)
     {
@@ -83,7 +92,6 @@ public sealed class ProjectManager
         if (!domain.Contains('.')) domain += ".local";
         return domain;
     }
-    private static string Slug(string value) => string.Join('-', value.Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        .Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_').Aggregate("", (s, c) => s + c).Trim('-', '_');
+    private static string Slug(string value) => string.Join('-', value.Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_').Aggregate("", (s, c) => s + c).Trim('-', '_');
     private static string Escape(string value) => value.Replace("'", "&#39;").Replace("<", "&lt;").Replace(">", "&gt;");
 }
