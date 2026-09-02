@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http;
 using STAVCMS.LocalServer.Core;
 
@@ -45,6 +46,35 @@ public sealed class ServerManager : IAsyncDisposable
         _mariaDb.Start(exe, $"--defaults-file=\"{defaults}\" --console", Path.GetDirectoryName(exe));
     }
 
+    public async Task CreateDatabaseAsync(string database, CancellationToken cancellationToken = default)
+    {
+        if (database.Any(c => !(char.IsLetterOrDigit(c) || c == '_')))
+            throw new InvalidOperationException("Некорректное имя базы данных.");
+        if (!MariaDbRunning) throw new InvalidOperationException("MariaDB должна быть запущена для создания базы данных.");
+
+        var client = new[] { "mariadb.exe", "mysql.exe" }
+            .Select(name => Path.Combine(_paths.Bin, "mariadb", "bin", name))
+            .FirstOrDefault(File.Exists) ?? throw new FileNotFoundException("Не найден клиент MariaDB.");
+        var sql = $"CREATE DATABASE IF NOT EXISTS `{database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
+        var psi = new ProcessStartInfo
+        {
+            FileName = client,
+            Arguments = $"-h 127.0.0.1 -P {DbPort} -u root --protocol=tcp -e \"{sql}\"",
+            WorkingDirectory = Path.GetDirectoryName(client)!,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true
+        };
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Не удалось запустить клиент MariaDB.");
+        await process.WaitForExitAsync(cancellationToken);
+        if (process.ExitCode != 0)
+        {
+            var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+            throw new InvalidOperationException($"Не удалось создать базу данных: {error}".Trim());
+        }
+    }
+
     public async Task<bool> CheckHttpAsync(CancellationToken cancellationToken = default)
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
@@ -53,10 +83,7 @@ public sealed class ServerManager : IAsyncDisposable
             using var response = await client.GetAsync($"http://127.0.0.1:{HttpPort}/", cancellationToken);
             return response.IsSuccessStatusCode;
         }
-        catch
-        {
-            return false;
-        }
+        catch { return false; }
     }
 
     public async Task StopAllAsync()
