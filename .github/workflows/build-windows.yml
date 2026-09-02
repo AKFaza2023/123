@@ -8,38 +8,30 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
       - name: Restore
         run: dotnet restore STAVCMS.LocalServer.sln
-
       - name: Build
         run: dotnet build STAVCMS.LocalServer.sln -c Release --no-restore
-
       - name: Publish STAVCMS Local Server GUI
         run: dotnet publish src/STAVCMS.LocalServer.App/STAVCMS.LocalServer.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
-
       - name: Add portable folders and config
         shell: pwsh
         run: |
           Copy-Item -Path config -Destination publish/config -Recurse -Force
           New-Item -ItemType Directory -Force -Path publish/bin, publish/logs, publish/runtime, publish/projects, publish/databases, publish/backups, publish/ssl | Out-Null
-
       - name: Bundle Apache PHP and MariaDB
         shell: pwsh
         run: ./scripts/prepare-components.ps1
-
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: STAVCMS-LocalServer-0.4-win-x64-full
+          name: STAVCMS-LocalServer-0.5-win-x64-full
           path: publish/**
           if-no-files-found: error
