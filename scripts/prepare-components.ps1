@@ -8,7 +8,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $publish 'bin') | Out-Null
 
 function Download-File([string]$Url, [string]$OutFile) {
     Write-Host "Downloading $Url"
-    Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
+    Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -AllowInsecureRedirect
 }
 
 function Reset-Directory([string]$Path) {
@@ -16,7 +16,7 @@ function Reset-Directory([string]$Path) {
     New-Item -ItemType Directory -Force -Path $Path | Out-Null
 }
 
-# Apache 2.4.66 Win64 VS17 (Apache Lounge build referenced by the PHP/Apache Windows ecosystem)
+# Apache 2.4.66 Win64 VS17
 $apacheZip = Join-Path $temp 'apache.zip'
 Download-File 'https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.66-251206-win64-VS17.zip' $apacheZip
 $apacheExtract = Join-Path $temp 'apache'
@@ -94,7 +94,6 @@ foreach ($ext in @('curl','fileinfo','gd','intl','mbstring','mysqli','openssl','
 $ini += "`r`ndate.timezone=UTC`r`n"
 Set-Content -Path $phpIni -Value $ini -Encoding UTF8
 
-# MariaDB portable configuration. Data is initialized on first launch by the application.
 $mariaIni = @'
 [mysqld]
 port=3306
